@@ -25,6 +25,25 @@ const BOT_HEAD_MULT = 2.5;
 
 const NAMES = ['Dune', 'Vex', 'Sable', 'Rook', 'Fennec', 'Mira', 'Jolt', 'Pike', 'Nadir', 'Onyx'];
 
+// Radio lines, picked at random so the same situation never sounds the same twice.
+const CONTACT_LINES = [
+  (zone) => `Contact at ${zone} — engaging`,
+  (zone) => `Two hostiles at ${zone} — weapons free`,
+  (zone) => `Movement at ${zone} — eyes on`,
+  (zone) => `They're pushing ${zone} — hold the line`,
+];
+const EXECUTE_LINES = [
+  (site) => `go go, executing ${site}`,
+  (site) => `Stacking up on ${site} — on me`,
+  (site) => `Hitting ${site} hard — smoke and go`,
+  (site) => `${site} push, right now — move`,
+];
+const SMOKE_LINES = [
+  (site) => `Smoke on ${site} — pushing through`,
+  (site) => `Throwing smoke on ${site} gate — go go`,
+  (site) => `${site} is blind — move in`,
+];
+
 // Breadth-first path over the waypoint graph, from the node nearest `from` to `to`.
 export function findPath(from, to) {
   let start = null;
@@ -156,6 +175,15 @@ export function createBots(scene, world, random) {
       routeIndex: 0,
       state: 'advance',
       holdNode: null,
+      profile: 'holder',
+      speed: BOT_SPEED,
+      reactionMin: REACTION_MIN,
+      reactionMax: REACTION_MAX,
+      burstMin: BURST_MIN,
+      burstMax: BURST_MAX,
+      spread: BOT_SPREAD,
+      smokeReady: false,
+      patrolIndex: 0,
       scanAt: random() * 0.12,
       reactionAt: 0,
       burstLeft: 0,
@@ -181,8 +209,21 @@ export function createBots(scene, world, random) {
   for (let i = 0; i < 4; i += 1) bots.push(buildBot(i, 'attack'));
   for (let i = 0; i < 5; i += 1) bots.push(buildBot(4 + i, 'defend'));
 
-  function spawnRound() {
-    const routes = ['A', 'B', 'M', 'A'];
+  function spawnRound(round = 1) {
+    // One tactic per round, drawn from the seed: split the sites, rush one site,
+    // or push mid. The same map never plays the same round twice in a row.
+    const tactics = [
+      ['A', 'B', 'M', 'A'],
+      ['A', 'A', 'M', 'B'],
+      ['B', 'B', 'M', 'A'],
+      ['M', 'M', 'A', 'B'],
+    ];
+    const routes = tactics[Math.floor(random() * tactics.length)];
+    // Profiles: a rusher runs fast and fires short bursts, a holder walks slow,
+    // aims longer and lands more shots, a support carries the smoke. One defender
+    // roams mid instead of sitting a hold.
+    const attackProfiles = ['support', 'rusher', 'holder', 'rusher'];
+    const defendProfiles = ['roamer', 'holder', 'holder', 'rusher', 'holder'];
     let planterSet = false;
     let planterRoute = 'A';
     bots.forEach((bot, i) => {
@@ -198,20 +239,39 @@ export function createBots(scene, world, random) {
       bot.state = 'advance';
       bot.burstLeft = 0;
       bot.radioAt = 0;
+      bot.smokeReady = false;
+      bot.patrolIndex = 0;
       if (bot.team === 'attack') {
+        bot.profile = attackProfiles[i % attackProfiles.length];
+        bot.speed = bot.profile === 'rusher' ? 4.3 : bot.profile === 'holder' ? 3.0 : BOT_SPEED;
+        bot.reactionMin = bot.profile === 'rusher' ? 0.25 : 0.35;
+        bot.reactionMax = bot.profile === 'rusher' ? 0.5 : 0.7;
+        bot.burstMin = bot.profile === 'holder' ? 5 : BURST_MIN;
+        bot.burstMax = bot.profile === 'holder' ? 7 : BURST_MAX;
+        bot.spread = bot.profile === 'holder' ? 0.028 : bot.profile === 'rusher' ? 0.042 : BOT_SPREAD;
+        bot.smokeReady = bot.profile === 'support';
         const [x, z] = SPAWNS.attack[i];
         bot.position.set(x, 0, z);
         bot.yaw = Math.PI;
         const key = routes[i % routes.length];
         bot.route = [...ATTACK_ROUTES[key]];
         bot.routeIndex = 1;
-        bot.isPlanter = !planterSet && key === 'A';
+        bot.isPlanter = !planterSet && (key === 'A' || key === 'B');
         if (bot.isPlanter) { planterSet = true; planterRoute = key; }
       } else {
-        const [x, z] = SPAWNS.defend[i - 4];
+        const di = i - 4;
+        bot.profile = defendProfiles[di % defendProfiles.length];
+        bot.speed = bot.profile === 'roamer' ? 3.9 : bot.profile === 'holder' ? 3.0 : BOT_SPEED;
+        bot.reactionMin = bot.profile === 'rusher' ? 0.25 : 0.35;
+        bot.reactionMax = bot.profile === 'rusher' ? 0.5 : 0.7;
+        bot.burstMin = bot.profile === 'holder' ? 5 : BURST_MIN;
+        bot.burstMax = bot.profile === 'holder' ? 7 : BURST_MAX;
+        bot.spread = bot.profile === 'holder' ? 0.028 : bot.profile === 'rusher' ? 0.042 : BOT_SPREAD;
+        const [x, z] = SPAWNS.defend[di];
         bot.position.set(x, 0, z);
         bot.yaw = 0;
-        bot.holdNode = DEFEND_HOLDS[i - 4];
+        // Holds rotate one step each round, so defenders never sit the same angle.
+        bot.holdNode = DEFEND_HOLDS[(di + (round - 1)) % DEFEND_HOLDS.length];
         bot.route = findPath(bot.position, bot.holdNode);
         bot.routeIndex = 0;
         bot.isPlanter = false;
@@ -226,18 +286,20 @@ export function createBots(scene, world, random) {
     return tmpEye;
   }
 
-  // True if nothing but air sits between the bot's eyes and the point.
-  function hasLineOfSight(from, point) {
+  // True if nothing but air sits between the bot's eyes and the point — and no
+  // smoke cloud, which hides both ways for every bot.
+  function hasLineOfSight(from, point, ctx) {
     tmpDir.copy(point).sub(from);
     const len = tmpDir.length();
     if (len < 0.01) return true;
+    if (ctx.smokeBlocks && ctx.smokeBlocks(from, point)) return false;
     tmpDir.divideScalar(len);
     ray.set(from, tmpDir);
     ray.far = len;
     return !ray.intersectObjects(world.shootables, false)[0];
   }
 
-  function sees(bot, point, eye) {
+  function sees(bot, point, eye, ctx) {
     tmpTo.copy(point).sub(eye);
     const dist = tmpTo.length();
     if (dist > VISION_RANGE) return false;
@@ -247,7 +309,7 @@ export function createBots(scene, world, random) {
       tmpTo.normalize();
       if (forward.dot(tmpTo) < Math.cos(VISION_HALF_FOV)) return false;
     }
-    return hasLineOfSight(eye, point);
+    return hasLineOfSight(eye, point, ctx);
   }
 
   // The nearest visible enemy: the player, or an enemy bot. Scans are staggered so
@@ -259,7 +321,7 @@ export function createBots(scene, world, random) {
     let bestDist = Infinity;
     if (ctx.playerAlive) {
       tmpTarget.set(ctx.playerPos.x, ctx.playerPos.y + 1.1, ctx.playerPos.z);
-      if (sees(bot, tmpTarget, eye)) {
+      if (sees(bot, tmpTarget, eye, ctx)) {
         best = { kind: 'player' };
         bestDist = tmpTarget.distanceTo(eye);
       }
@@ -269,7 +331,7 @@ export function createBots(scene, world, random) {
       tmpTarget.set(other.position.x, other.position.y + 1.1, other.position.z);
       const dist = tmpTarget.distanceTo(eye);
       if (dist >= bestDist) continue;
-      if (sees(bot, tmpTarget, eye)) {
+      if (sees(bot, tmpTarget, eye, ctx)) {
         best = { kind: 'bot', bot: other };
         bestDist = dist;
       }
@@ -279,13 +341,14 @@ export function createBots(scene, world, random) {
       bot.lastSeen.copy(best.kind === 'player' ? ctx.playerPos : best.bot.position);
       bot.lastSeen.y += 1.1;
       if (bot.state !== 'engage') {
-        bot.reactionAt = now + REACTION_MIN + random() * (REACTION_MAX - REACTION_MIN);
+        bot.reactionAt = now + bot.reactionMin + random() * (bot.reactionMax - bot.reactionMin);
         bot.burstLeft = 0;
         // Radio callout on first contact, throttled per bot: a named voice, a place.
         if (ctx.onRadio && now >= bot.radioAt) {
           bot.radioAt = now + 9;
           const zone = ctx.zoneName ? ctx.zoneName(bot.position.x, bot.position.z) : 'mid';
-          ctx.onRadio(bot, `Contact at ${zone} — engaging`);
+          const line = CONTACT_LINES[Math.floor(random() * CONTACT_LINES.length)];
+          ctx.onRadio(bot, line(zone));
         }
       }
       bot.state = 'engage';
@@ -355,7 +418,7 @@ export function createBots(scene, world, random) {
       // Fire only once the aim has settled past the reaction delay, in bursts.
       if (now >= bot.reactionAt && Math.abs(diff) < 0.12) {
         if (bot.burstLeft === 0 && now >= bot.nextShotAt) {
-          bot.burstLeft = BURST_MIN + Math.floor(random() * (BURST_MAX - BURST_MIN + 1));
+          bot.burstLeft = bot.burstMin + Math.floor(random() * (bot.burstMax - bot.burstMin + 1));
           bot.nextShotAt = now + BURST_COOLDOWN + random() * 0.4;
         }
         if (bot.burstLeft > 0 && now >= bot.nextShotAt - BURST_COOLDOWN) {
@@ -368,6 +431,28 @@ export function createBots(scene, world, random) {
         }
       }
       return;
+    }
+
+    // The support throws its smoke at the site gate before the push goes in:
+    // the cloud hides the plant from every defender watching the site.
+    if (ctx.live && bot.profile === 'support' && bot.smokeReady && bot.team === 'attack'
+      && bot.state !== 'engage' && ctx.throwSmoke && bot.route.length) {
+      const lastNode = bot.route[bot.route.length - 1];
+      if (lastNode === 'aSite' || lastNode === 'bSite') {
+        const [sx, sz] = WAYPOINTS[lastNode];
+        const dSite = Math.hypot(bot.position.x - sx, bot.position.z - sz);
+        if (dSite < 10) {
+          bot.smokeReady = false;
+          const eye = eyeOf(bot);
+          tmpDir.set(sx - eye.x, 0.4, sz - eye.z).normalize();
+          ctx.throwSmoke(new THREE.Vector3(eye.x, eye.y, eye.z), tmpDir.clone());
+          if (ctx.onRadio) {
+            const site = lastNode === 'aSite' ? 'A' : 'B';
+            const line = SMOKE_LINES[Math.floor(random() * SMOKE_LINES.length)];
+            ctx.onRadio(bot, line(site));
+          }
+        }
+      }
     }
 
     // Planting: the planter channels at its site while nobody watches it.
@@ -415,6 +500,16 @@ export function createBots(scene, world, random) {
       if (d < 0.7) {
         bot.routeIndex += 1;
         if (bot.routeIndex >= bot.route.length) {
+          // The roamer never sits still: on reaching a patrol point it walks to
+          // the next one, sweeping mid so attackers cannot cross it for free.
+          if (bot.profile === 'roamer' && bot.team === 'defend' && ctx.live) {
+            const patrol = ['defWest', 'defMid', 'defEast', 'defMid'];
+            bot.patrolIndex = (bot.patrolIndex + 1) % patrol.length;
+            bot.route = findPath(bot.position, patrol[bot.patrolIndex]);
+            bot.routeIndex = 0;
+            bot.state = 'advance';
+            return;
+          }
           bot.state = 'hold';
           bot.velocity.x = 0;
           bot.velocity.z = 0;
@@ -431,8 +526,8 @@ export function createBots(scene, world, random) {
     const dx = goal.x - bot.position.x;
     const dz = goal.z - bot.position.z;
     const len = Math.hypot(dx, dz) || 1;
-    bot.velocity.x = (dx / len) * BOT_SPEED;
-    bot.velocity.z = (dz / len) * BOT_SPEED;
+    bot.velocity.x = (dx / len) * bot.speed;
+    bot.velocity.z = (dz / len) * bot.speed;
     bot.velocity.y -= 20 * dt;
     bot.yaw = Math.atan2(-dx, -dz);
     bot.group.rotation.y = bot.yaw;
@@ -442,9 +537,9 @@ export function createBots(scene, world, random) {
   function fireAt(bot, targetPos, ctx) {
     const eye = eyeOf(bot);
     tmpDir.copy(targetPos).sub(eye).normalize();
-    tmpDir.x += (random() * 2 - 1) * BOT_SPREAD;
-    tmpDir.y += (random() * 2 - 1) * BOT_SPREAD;
-    tmpDir.z += (random() * 2 - 1) * BOT_SPREAD;
+    tmpDir.x += (random() * 2 - 1) * bot.spread;
+    tmpDir.y += (random() * 2 - 1) * bot.spread;
+    tmpDir.z += (random() * 2 - 1) * bot.spread;
     tmpDir.normalize();
     ray.set(eye, tmpDir);
     ray.far = 60;

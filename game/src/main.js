@@ -9,7 +9,7 @@ import { PALETTE } from './palette.js';
 import { createWorld, SPAWNS, ZONES } from './world.js';
 import { createInput } from './input.js';
 import { createPlayer } from './player.js';
-import { createWeapon, WEAPONS, GRENADE_PRICE, ARMOR_PRICE, KIT_PRICE } from './weapon.js';
+import { createWeapon, WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE, KIT_PRICE } from './weapon.js';
 import { createBots } from './bots.js';
 import { createGrenades } from './grenades.js';
 import { createBomb, PLANT_TIME, DEFUSE_TIME } from './bomb.js';
@@ -163,6 +163,8 @@ const botCtx = {
   get bombPos() { return bomb.state.position; },
   shootables,
   zoneName,
+  smokeBlocks(from, point) { return grenades.blocksVision(from, point); },
+  throwSmoke(from, direction) { grenades.throwSmoke(from, direction); },
   onRadio(bot, text) { radio(bot, text); },
   onShotFired(bot, eye) { audio.enemyShot(); },
   onBotHit(victim, amount, attacker, part) { botHurt(victim, amount, attacker, part); },
@@ -228,7 +230,10 @@ function botHurt(bot, amount, attacker, part) {
   const killerWeapon = attacker === 'player' ? weapon.config().name : 'VK-7';
   const cause = part === 'head' ? 'head' : part === 'grenade' ? 'grenade' : 'body';
   hud.killfeed(killerName, `${bot.name} [${bot.team === 'attack' ? 'SANDLINE' : 'VULTURES'}]`, cause, killerWeapon);
-  if (bot.team === 'attack') radio({ name: 'SANDLINE' }, `${bot.name} is down`);
+  if (bot.team === 'attack') {
+    const zone = zoneName(bot.position.x, bot.position.z);
+    radio({ name: 'SANDLINE' }, `${bot.name} is down at ${zone}`);
+  }
   if (attacker === 'player') {
     playerState.kills += 1;
     economy.earn(KILL_REWARD);
@@ -281,10 +286,21 @@ function throwGrenade() {
   const origin = camera.position.clone().addScaledVector(direction, 0.5);
   grenades.throwGrenade(origin, direction);
   hud.roundMessage(`Grenade out — ${weapon.state.grenades} left`);
+  refreshLoadout();
+}
+
+function throwSmoke() {
+  if (weapon.state.smokes <= 0) return;
+  weapon.state.smokes -= 1;
+  camera.getWorldDirection(direction);
+  const origin = camera.position.clone().addScaledVector(direction, 0.5);
+  grenades.throwSmoke(origin, direction);
+  hud.roundMessage(`Smoke out — ${weapon.state.smokes} left`);
+  refreshLoadout();
 }
 
 function refreshLoadout() {
-  hud.setLoadout(weapon.state.current, weapon.owned, weapon.state.grenades, weapon.state.kit);
+  hud.setLoadout(weapon.state.current, weapon.owned, weapon.state.grenades, weapon.state.kit, weapon.state.smokes);
 }
 
 function buy(item) {
@@ -299,6 +315,11 @@ function buy(item) {
     if (weapon.state.grenades >= 2) return;
     if (!economy.spend(GRENADE_PRICE)) { audio.click(); return; }
     weapon.state.grenades += 1;
+    audio.click();
+  } else if (item === 'smoke') {
+    if (weapon.state.smokes >= 2) return;
+    if (!economy.spend(SMOKE_PRICE)) { audio.click(); return; }
+    weapon.state.smokes += 1;
     audio.click();
   } else if (item === 'armor') {
     if (weapon.state.armor >= 100) return;
@@ -345,9 +366,17 @@ function startRound() {
   rounds.startRound();
   bomb.reset();
   grenades.clear();
-  const planterRoute = bots.spawnRound();
+  const planterRoute = bots.spawnRound(rounds.state.round);
   const planter = bots.bots.find((b) => b.isPlanter);
-  if (planter) radio(planter, `go go, executing ${planterRoute}`);
+  if (planter) {
+    const lines = [
+      (site) => `go go, executing ${site}`,
+      (site) => `Stacking up on ${site} — on me`,
+      (site) => `Hitting ${site} hard — smoke and go`,
+      (site) => `${site} push, right now — move`,
+    ];
+    radio(planter, lines[Math.floor(random() * lines.length)](planterRoute));
+  }
   rebuildGrenadeTargets();
   const [x, z] = SPAWNS.attack[0];
   body.position.set(x, 0, z);
@@ -555,11 +584,13 @@ function frame(now) {
       if (input.takePress('Digit4')) buy('grenade');
       if (input.takePress('Digit5')) buy('armor');
       if (input.takePress('Digit6')) buy('kit');
+      if (input.takePress('Digit7')) buy('smoke');
     } else {
       if (input.takePress('Digit1')) { weapon.switchTo('pistol'); refreshLoadout(); }
       if (input.takePress('Digit2')) { weapon.switchTo('rifle'); refreshLoadout(); }
       if (input.takePress('Digit3')) { weapon.switchTo('smg'); refreshLoadout(); }
       if (input.takePress('KeyG')) throwGrenade();
+      if (input.takePress('KeyQ')) throwSmoke();
     }
     if (input.state.locked && playerState.alive && rounds.state.phase === 'live') {
       if (input.state.firing && weapon.ready()) shoot(weapon.spread(player.groundSpeed()));
@@ -602,19 +633,31 @@ function runShot(name) {
     settle(30);
     // Walk two defenders into the open gantry ground south of the mill hall, so the
     // frame reads as a firefight: both in the clear, name tags readable, the hall
-    // behind them for depth.
+    // behind them for depth. They stand close enough that both fit one frame.
     const defenders = bots.bots.filter((b) => b.team === 'defend');
-    defenders[0].position.set(-2.5, 0, 3.5);
-    defenders[1].position.set(2.5, 0, 3);
+    defenders[0].position.set(-2.6, 0, 3.6);
+    defenders[1].position.set(-0.6, 0, 3.0);
     defenders[0].yaw = Math.PI;
     defenders[1].yaw = Math.PI;
     defenders[0].group.rotation.y = Math.PI;
     defenders[1].group.rotation.y = Math.PI;
     settle(10);
-    aimAt(new THREE.Vector3(-2.5, 1.2, 3.5));
+    // A support bot's smoke pops left of the defenders, so the cover shows the
+    // new utility in play: a grey cloud at the frame's edge, defenders visible
+    // beside it, muzzle flash and tracer cutting across. The long settle lets
+    // the cloud fully swell (fuse 1.1 s + ~1.4 s of growth) before the frame.
+    weapon.state.smokes = 1;
+    refreshLoadout();
+    grenades.throwSmoke(
+      new THREE.Vector3(-3.0, 1.6, 5.0),
+      new THREE.Vector3(0.1, 0.2, -1).normalize(),
+      3.5,
+    );
+    settle(150);
+    aimAt(new THREE.Vector3(-2.6, 1.2, 3.6));
     shoot(0);
     settle(12);
-    aimAt(new THREE.Vector3(2.5, 1.2, 3));
+    aimAt(new THREE.Vector3(-0.6, 1.2, 3.0));
     shoot(0);
     settle(1);
     // The staged frame is a hero shot, not a damage report: restore full health.

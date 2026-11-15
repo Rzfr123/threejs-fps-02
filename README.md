@@ -17,15 +17,19 @@ and painted A/B site letters on the north wall. 12 rounds, first to 7.
   elimination. A planted bomb ticks 35 s, then detonates.
 - **Economy:** $800 start, $300 per kill, $300 per plant, $3250 round win,
   $1400 round loss. Buy phase (B) sells the VK-7 rifle ($2700), RAT-9 SMG
-  ($1500), frag grenade ($300), Kevlar ($650) and a defuse kit ($400, halves
+  ($1500), frag grenade ($300), smoke grenade ($400, a 12 s cloud that hides
+  you from every bot's vision), Kevlar ($650) and a defuse kit ($400, halves
   defuse time). Pistol is free.
 - **Gunplay:** hitscan with headshots (2.5x), recoil, spread that punishes
   firing on the move, distance falloff, reloads, crouch and jump, and AABB
   collision with the map.
 - **Bots:** named (Dune, Vex, Sable, Rook, Fennec, Mira, Jolt, Pike, Nadir,
   Onyx) with name tags and radio callouts ("go go, executing A", "Contact at
-  Mill Hall — engaging"). Waypoint routes per lane, line-of-sight vision with
-  reaction delays, burst fire, hearing nearby gunfire, planting and defusing.
+  Mill Hall — engaging"). Each round picks a tactic (split, rush A, rush B,
+  mid push); bots play profiles — rusher, holder, support (throws smoke at
+  the site gate before a push), and one defender roams mid. Waypoint routes
+  per lane, line-of-sight vision with reaction delays, burst fire, hearing
+  nearby gunfire, planting and defusing. Smoke blocks bot vision both ways.
 - **HUD:** minimap with sites and live dots, location name, health/armour,
   money, round timer, score, alive counts, kill feed with weapon and
   headshots, radio line, weapon slots + utility, bomb banner, plant/defuse

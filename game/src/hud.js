@@ -4,7 +4,7 @@
 // touches the simulation; main.js pushes numbers in and reads the play and buy
 // callbacks out. Values are only written when they change; the minimap is a 2D
 // canvas redrawn from the world's wall rectangles.
-import { WEAPONS, GRENADE_PRICE, ARMOR_PRICE, KIT_PRICE } from './weapon.js';
+import { WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE, KIT_PRICE } from './weapon.js';
 
 const COPY = {
   start: {
@@ -74,7 +74,7 @@ export function createHud() {
       setText(weaponName, 'wname', name);
       $('ammo').classList.toggle('empty', mag === 0);
     },
-    setLoadout(current, owned, grenades, kit) {
+    setLoadout(current, owned, grenades, kit, smokes = 0) {
       const slots = [
         { id: 'pistol', key: '1', label: 'P9' },
         { id: 'rifle', key: '2', label: 'VK-7' },
@@ -84,7 +84,9 @@ export function createHud() {
         const active = current === s.id;
         return `<span class="slot${active ? ' active' : ''}${has ? '' : ' locked'}">${s.key} ${s.label}</span>`;
       }).join('');
-      const util = `<span class="slot util">G Frag ×${grenades}</span>` + (kit ? '<span class="slot util">Kit</span>' : '');
+      const util = `<span class="slot util">G Frag ×${grenades}</span>`
+        + (smokes > 0 ? `<span class="slot util">Q Smoke ×${smokes}</span>` : '')
+        + (kit ? '<span class="slot util">Kit</span>' : '');
       const html = slots + util;
       if (last.loadout === html) return;
       last.loadout = html;
@@ -191,6 +193,7 @@ export function createHud() {
         btn.querySelector('.buy-price').textContent = owned[id] ? 'OWNED' : `$${WEAPONS[id].price}`;
       }
       $('buy-grenade').querySelector('.buy-price').textContent = `$${GRENADE_PRICE}`;
+      $('buy-smoke').querySelector('.buy-price').textContent = `$${SMOKE_PRICE}`;
       $('buy-armor').querySelector('.buy-price').textContent = `$${ARMOR_PRICE}`;
       $('buy-kit').querySelector('.buy-price').textContent = `$${KIT_PRICE}`;
     },

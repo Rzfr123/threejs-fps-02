@@ -1,6 +1,8 @@
-// Grenades: thrown with an arc, one floor bounce, then a timed blast. The blast hurts
-// through a radius with falloff and is blocked by walls: a target counts only when a
-// ray from the blast point to its chest reaches it before any wall does.
+// Grenades: a frag and a smoke, both thrown with an arc. The frag bounces once,
+// then a timed blast that hurts through a radius with falloff, blocked by walls.
+// The smoke pops on landing into a grey cloud that lives ~12 s: it blocks
+// line of sight for every bot on both teams (vision checks ask blocksVision),
+// so a push can cross an open lane unseen, but bullets still fly through it.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
@@ -8,20 +10,28 @@ const FUSE = 1.6;
 const BLAST_RADIUS = 7;
 const BLAST_MAX = 95;
 const GRAVITY = 14;
+const SMOKE_FUSE = 1.1;
+const SMOKE_LIFE = 12;
+const SMOKE_RADIUS = 2.6;
+const SMOKE_PUFFS = 7;
 
 export function createGrenades(scene, colliders, shootables) {
   const items = [];
+  const clouds = [];
   const ray = new THREE.Raycaster();
   const from = new THREE.Vector3();
   const to = new THREE.Vector3();
   const dir = new THREE.Vector3();
+  const seg = new THREE.Vector3();
 
   const shellGeo = new THREE.SphereGeometry(0.09, 10, 8);
   const shellMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.rust), roughness: 0.5, metalness: 0.4 });
+  const smokeGeo = new THREE.SphereGeometry(1, 12, 9);
+  const smokeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xb9b2a4), transparent: true, opacity: 0.34, depthWrite: false });
   const blastGeo = new THREE.SphereGeometry(1, 20, 14);
   const blastMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(PALETTE.accent), transparent: true, opacity: 0.55, depthWrite: false });
 
-  function throwGrenade(origin, direction, speed = 11) {
+  function throwShell(origin, direction, speed, fuse, kind) {
     const mesh = new THREE.Mesh(shellGeo, shellMat);
     mesh.position.copy(origin);
     mesh.castShadow = true;
@@ -29,11 +39,67 @@ export function createGrenades(scene, colliders, shootables) {
     items.push({
       mesh,
       velocity: direction.clone().multiplyScalar(speed).add(new THREE.Vector3(0, 4.5, 0)),
-      fuse: FUSE,
+      fuse,
       bounced: false,
       blast: null,
       blastAge: 0,
+      kind,
     });
+  }
+
+  function throwGrenade(origin, direction, speed = 11) {
+    throwShell(origin, direction, speed, FUSE, 'frag');
+  }
+
+  function throwSmoke(origin, direction, speed = 10) {
+    throwShell(origin, direction, speed, SMOKE_FUSE, 'smoke');
+  }
+
+  // A smoke cloud: a cluster of soft grey puffs around a centre, swelling in the
+  // first second, drifting up slowly, fading out over its last three seconds.
+  function deploySmoke(center) {
+    const puffs = [];
+    for (let i = 0; i < SMOKE_PUFFS; i += 1) {
+      const puff = new THREE.Mesh(smokeGeo, smokeMat.clone());
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * SMOKE_RADIUS * 0.55;
+      puff.position.set(
+        center.x + Math.cos(a) * r,
+        Math.max(0.5, center.y + 0.9 + (Math.random() - 0.5) * 1.2),
+        center.z + Math.sin(a) * r,
+      );
+      puff.scale.setScalar(0.7 + Math.random() * 0.5);
+      puff.userData.grow = 0.9 + Math.random() * 0.4;
+      puff.userData.drift = 0.12 + Math.random() * 0.15;
+      scene.add(puff);
+      puffs.push(puff);
+    }
+    clouds.push({ center: center.clone(), puffs, age: 0, life: SMOKE_LIFE });
+  }
+
+  // True when a smoke cloud sits between two points: the closest approach of the
+  // segment to the cloud centre is inside its radius. Clouds younger than half a
+  // second are still popping, and dying clouds no longer hide anyone. Plain
+  // arithmetic only — this runs on every bot vision scan, so it allocates nothing.
+  function blocksVision(a, b) {
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const abz = b.z - a.z;
+    const lenSq = abx * abx + aby * aby + abz * abz;
+    if (lenSq < 0.0001) return false;
+    for (const cloud of clouds) {
+      if (cloud.age < 0.5 || cloud.age > cloud.life - 0.5) continue;
+      const acx = cloud.center.x - a.x;
+      const acy = cloud.center.y - a.y;
+      const acz = cloud.center.z - a.z;
+      let t = (acx * abx + acy * aby + acz * abz) / lenSq;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = acx - abx * t;
+      const dy = acy - aby * t;
+      const dz = acz - abz * t;
+      if (dx * dx + dy * dy + dz * dz < SMOKE_RADIUS * SMOKE_RADIUS) return true;
+    }
+    return false;
   }
 
   function step(dt, damageTargets) {
@@ -68,6 +134,11 @@ export function createGrenades(scene, colliders, shootables) {
       if (g.fuse <= 0) {
         const center = g.mesh.position.clone();
         scene.remove(g.mesh);
+        if (g.kind === 'smoke') {
+          deploySmoke(center);
+          items.splice(i, 1);
+          continue;
+        }
         const blast = new THREE.Mesh(blastGeo, blastMat.clone());
         blast.position.copy(center);
         scene.add(blast);
@@ -95,6 +166,21 @@ export function createGrenades(scene, colliders, shootables) {
         }
       }
     }
+    for (let i = clouds.length - 1; i >= 0; i -= 1) {
+      const cloud = clouds[i];
+      cloud.age += dt;
+      const fade = cloud.age > cloud.life - 3 ? Math.max(0, (cloud.life - cloud.age) / 3) : 1;
+      const grow = Math.min(1, cloud.age / 1.2);
+      for (const puff of cloud.puffs) {
+        puff.scale.setScalar(puff.userData.grow * (0.55 + 0.45 * grow));
+        puff.position.y += puff.userData.drift * dt;
+        puff.material.opacity = 0.34 * fade;
+      }
+      if (cloud.age >= cloud.life) {
+        for (const puff of cloud.puffs) scene.remove(puff);
+        clouds.splice(i, 1);
+      }
+    }
   }
 
   function clear() {
@@ -103,7 +189,11 @@ export function createGrenades(scene, colliders, shootables) {
       if (g.blast) scene.remove(g.blast);
     }
     items.length = 0;
+    for (const cloud of clouds) {
+      for (const puff of cloud.puffs) scene.remove(puff);
+    }
+    clouds.length = 0;
   }
 
-  return { throwGrenade, step, clear, active: items };
+  return { throwGrenade, throwSmoke, blocksVision, step, clear, active: items, clouds };
 }

@@ -12,6 +12,7 @@ export const WEAPONS = {
   smg: { name: 'RAT-9 SMG', mag: 28, reserve: 112, gap: 0.068, reload: 1.8, dmg: 24, dmgFar: 16, spreadStill: 0.006, spreadMove: 0.034, auto: true, price: 1500, key: 'Digit3' },
 };
 export const GRENADE_PRICE = 300;
+export const SMOKE_PRICE = 400;
 export const ARMOR_PRICE = 650;
 export const KIT_PRICE = 400;
 
@@ -88,7 +89,7 @@ export function createWeapon(camera) {
   camera.add(flashLight);
 
   const owned = { pistol: { mag: WEAPONS.pistol.mag, reserve: WEAPONS.pistol.reserve } };
-  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, armor: 0, kit: false };
+  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, smokes: 0, armor: 0, kit: false };
   models.pistol.visible = true;
 
   function step(dt) {
