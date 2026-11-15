@@ -23,6 +23,17 @@ const BOT_SPREAD = 0.035;
 const BOT_DMG = 24;
 const BOT_HEAD_MULT = 2.5;
 
+// One gun per profile, so each bot fights differently: rushers spray the fast
+// pulse SMG, holders land heavy plasma shots, supports and roamers carry the
+// standard rifle. The tracer colour matches the gun, so a firefight reads by
+// colour as well as by sound.
+const PROFILE_WEAPONS = {
+  rusher: { dmg: 18, shotGap: 0.09, burstMin: 6, burstMax: 8, tracer: 0xa78bfa },
+  holder: { dmg: 26, shotGap: 0.15, burstMin: 4, burstMax: 6, tracer: 0x22d3ee },
+  support: { dmg: 24, shotGap: 0.13, burstMin: 3, burstMax: 5, tracer: 0x67e8f9 },
+  roamer: { dmg: 24, shotGap: 0.13, burstMin: 3, burstMax: 5, tracer: 0x67e8f9 },
+};
+
 const NAMES = ['Dune', 'Vex', 'Sable', 'Rook', 'Fennec', 'Mira', 'Jolt', 'Pike', 'Nadir', 'Onyx'];
 
 // Radio lines, picked at random so the same situation never sounds the same twice.
@@ -87,10 +98,6 @@ export function createBots(scene, world, random) {
     defend: new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.teal), roughness: 0.7 }),
   };
   const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.surface), roughness: 0.8 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.6 });
-  const torsoGeo = new THREE.BoxGeometry(0.52, 0.72, 0.3);
-  const headGeo = new THREE.SphereGeometry(0.16, 14, 10);
-  const legGeo = new THREE.BoxGeometry(0.42, 0.55, 0.26);
   const gunGeo = new THREE.BoxGeometry(0.07, 0.09, 0.55);
 
   // Tracer pool: fading lines from a muzzle to a hit point, reused, never allocated per shot.
@@ -108,9 +115,10 @@ export function createBots(scene, world, random) {
     tracers.push({ line, life: 0 });
   }
   let tracerIndex = 0;
-  function tracer(from, to) {
+  function tracer(from, to, colorHex) {
     const slot = tracers[tracerIndex];
     tracerIndex = (tracerIndex + 1) % tracers.length;
+    slot.line.material.color.setHex(colorHex ?? 0x22d3ee);
     const attr = slot.line.geometry.getAttribute('position');
     attr.setXYZ(0, from.x, from.y, from.z);
     attr.setXYZ(1, to.x, to.y, to.z);
@@ -125,15 +133,54 @@ export function createBots(scene, world, random) {
 
   function buildBot(index, team) {
     const group = new THREE.Group();
-    const torso = new THREE.Mesh(torsoGeo, teamMat[team]);
-    torso.position.y = 1.05;
-    const head = new THREE.Mesh(headGeo, skinMat);
-    head.position.y = 1.58;
-    const legs = new THREE.Mesh(legGeo, darkMat);
-    legs.position.y = 0.28;
+    const teamColor = team === 'attack' ? PALETTE.accent : PALETTE.teal;
+    // A low-poly combat robot: angular chest plate with a glowing core, a helm
+    // with an emissive visor strip, two-segment arms on shoulder pivots and
+    // two-segment legs on hip pivots. The chest and helm are the hitboxes, same
+    // sizes as before, so the fight plays exactly as it did.
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.5, 0.32), teamMat[team]);
+    torso.position.y = 1.12;
+    const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.34, 0.06), darkMat);
+    chestPlate.position.set(0, 1.12, -0.18);
+    const core = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.12, 0.04),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor) }),
+    );
+    core.position.set(0, 1.12, -0.21);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.26, 0.3), darkMat);
+    head.position.y = 1.56;
+    const visor = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.05, 0.02),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor) }),
+    );
+    visor.position.set(0, 1.57, -0.16);
+    const antenna = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.18, 0.02), darkMat);
+    antenna.position.set(0.12, 1.76, 0.05);
+    const legGeo = new THREE.BoxGeometry(0.18, 0.6, 0.22);
+    const legL = new THREE.Group();
+    legL.position.set(-0.13, 0.62, 0);
+    const legLMesh = new THREE.Mesh(legGeo, darkMat);
+    legLMesh.position.y = -0.3;
+    legL.add(legLMesh);
+    const legR = new THREE.Group();
+    legR.position.set(0.13, 0.62, 0);
+    const legRMesh = new THREE.Mesh(legGeo, darkMat);
+    legRMesh.position.y = -0.3;
+    legR.add(legRMesh);
+    const armGeo = new THREE.BoxGeometry(0.12, 0.55, 0.14);
+    const armL = new THREE.Group();
+    armL.position.set(-0.33, 1.32, 0);
+    const armLMesh = new THREE.Mesh(armGeo, teamMat[team]);
+    armLMesh.position.y = -0.22;
+    armL.add(armLMesh);
+    const armR = new THREE.Group();
+    armR.position.set(0.33, 1.32, 0);
+    const armRMesh = new THREE.Mesh(armGeo, teamMat[team]);
+    armRMesh.position.y = -0.22;
+    armR.add(armRMesh);
     const gun = new THREE.Mesh(gunGeo, darkMat);
     gun.position.set(0.2, 1.15, -0.25);
-    group.add(torso, head, legs, gun);
+    group.add(torso, chestPlate, core, head, visor, antenna, legL, legR, armL, armR, gun);
     group.traverse((mesh) => {
       if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true; }
     });
@@ -165,6 +212,14 @@ export function createBots(scene, world, random) {
       group,
       torso,
       head,
+      legL,
+      legR,
+      armL,
+      armR,
+      walkPhase: 0,
+      dmg: BOT_DMG,
+      shotGap: SHOT_GAP,
+      tracerColor: team === 'attack' ? 0x22d3ee : 0xf472b6,
       nameSprite,
       position: group.position,
       velocity: new THREE.Vector3(),
@@ -246,8 +301,12 @@ export function createBots(scene, world, random) {
         bot.speed = bot.profile === 'rusher' ? 4.3 : bot.profile === 'holder' ? 3.0 : BOT_SPEED;
         bot.reactionMin = bot.profile === 'rusher' ? 0.25 : 0.35;
         bot.reactionMax = bot.profile === 'rusher' ? 0.5 : 0.7;
-        bot.burstMin = bot.profile === 'holder' ? 5 : BURST_MIN;
-        bot.burstMax = bot.profile === 'holder' ? 7 : BURST_MAX;
+        const pw = PROFILE_WEAPONS[bot.profile];
+        bot.dmg = pw.dmg;
+        bot.shotGap = pw.shotGap;
+        bot.burstMin = pw.burstMin;
+        bot.burstMax = pw.burstMax;
+        bot.tracerColor = pw.tracer;
         bot.spread = bot.profile === 'holder' ? 0.028 : bot.profile === 'rusher' ? 0.042 : BOT_SPREAD;
         bot.smokeReady = bot.profile === 'support';
         const [x, z] = SPAWNS.attack[i];
@@ -264,8 +323,12 @@ export function createBots(scene, world, random) {
         bot.speed = bot.profile === 'roamer' ? 3.9 : bot.profile === 'holder' ? 3.0 : BOT_SPEED;
         bot.reactionMin = bot.profile === 'rusher' ? 0.25 : 0.35;
         bot.reactionMax = bot.profile === 'rusher' ? 0.5 : 0.7;
-        bot.burstMin = bot.profile === 'holder' ? 5 : BURST_MIN;
-        bot.burstMax = bot.profile === 'holder' ? 7 : BURST_MAX;
+        const pw = PROFILE_WEAPONS[bot.profile];
+        bot.dmg = pw.dmg;
+        bot.shotGap = pw.shotGap;
+        bot.burstMin = pw.burstMin;
+        bot.burstMax = pw.burstMax;
+        bot.tracerColor = pw.tracer;
         bot.spread = bot.profile === 'holder' ? 0.028 : bot.profile === 'rusher' ? 0.042 : BOT_SPREAD;
         const [x, z] = SPAWNS.defend[di];
         bot.position.set(x, 0, z);
@@ -415,6 +478,11 @@ export function createBots(scene, world, random) {
       bot.group.rotation.y = bot.yaw;
       bot.velocity.x = 0;
       bot.velocity.z = 0;
+      // Aim pose: both arms forward on the gun, legs planted.
+      bot.armL.rotation.x = -1.2;
+      bot.armR.rotation.x = -1.2;
+      bot.legL.rotation.x = 0;
+      bot.legR.rotation.x = 0;
       // Fire only once the aim has settled past the reaction delay, in bursts.
       if (now >= bot.reactionAt && Math.abs(diff) < 0.12) {
         if (bot.burstLeft === 0 && now >= bot.nextShotAt) {
@@ -422,8 +490,8 @@ export function createBots(scene, world, random) {
           bot.nextShotAt = now + BURST_COOLDOWN + random() * 0.4;
         }
         if (bot.burstLeft > 0 && now >= bot.nextShotAt - BURST_COOLDOWN) {
-          // Burst pacing: one shot per SHOT_GAP while the burst lasts.
-          if (!bot.shotAt || now - bot.shotAt >= SHOT_GAP) {
+          // Burst pacing: one shot per the profile's shot gap while the burst lasts.
+          if (!bot.shotAt || now - bot.shotAt >= bot.shotGap) {
             bot.shotAt = now;
             bot.burstLeft -= 1;
             fireAt(bot, targetPos, ctx);
@@ -513,6 +581,10 @@ export function createBots(scene, world, random) {
           bot.state = 'hold';
           bot.velocity.x = 0;
           bot.velocity.z = 0;
+          bot.legL.rotation.x = 0;
+          bot.legR.rotation.x = 0;
+          bot.armL.rotation.x = 0;
+          bot.armR.rotation.x = 0;
           return;
         }
       }
@@ -520,6 +592,10 @@ export function createBots(scene, world, random) {
       bot.state = 'hold';
       bot.velocity.x = 0;
       bot.velocity.z = 0;
+      bot.legL.rotation.x = 0;
+      bot.legR.rotation.x = 0;
+      bot.armL.rotation.x = 0;
+      bot.armR.rotation.x = 0;
       return;
     }
     if (!goal) return;
@@ -532,6 +608,13 @@ export function createBots(scene, world, random) {
     bot.yaw = Math.atan2(-dx, -dz);
     bot.group.rotation.y = bot.yaw;
     mover.move(bot.position, bot.velocity, dt, 1.72);
+    // Walk cycle: legs swing, arms counter-swing. No allocations in the hot loop.
+    bot.walkPhase += dt * bot.speed * 2.4;
+    const swing = Math.sin(bot.walkPhase) * 0.45;
+    bot.legL.rotation.x = swing;
+    bot.legR.rotation.x = -swing;
+    bot.armL.rotation.x = -swing * 0.5;
+    bot.armR.rotation.x = swing * 0.5;
   }
 
   function fireAt(bot, targetPos, ctx) {
@@ -547,15 +630,15 @@ export function createBots(scene, world, random) {
     const hit = hits[0];
     tmpEnd.copy(eye).addScaledVector(tmpDir, 40);
     const end = hit ? hit.point : tmpEnd;
-    tracer(eye, end);
+    tracer(eye, end, bot.tracerColor);
     ctx.onShotFired(bot, eye);
     if (!hit) return;
     if (hit.object.userData.bot) {
       const victim = hit.object.userData.bot;
       const mult = hit.object.userData.part === 'head' ? BOT_HEAD_MULT : 1;
-      ctx.onBotHit(victim, Math.round(BOT_DMG * mult), bot, hit.object.userData.part);
+      ctx.onBotHit(victim, Math.round(bot.dmg * mult), bot, hit.object.userData.part);
     } else if (ctx.playerAlive && hit.object.userData.isPlayer) {
-      ctx.onPlayerHit(Math.round(BOT_DMG * (hit.object.userData.part === 'head' ? BOT_HEAD_MULT : 1)), bot);
+      ctx.onPlayerHit(Math.round(bot.dmg * (hit.object.userData.part === 'head' ? BOT_HEAD_MULT : 1)), bot);
     }
   }
 

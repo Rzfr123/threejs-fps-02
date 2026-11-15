@@ -94,9 +94,10 @@ for (let i = 0; i < 8; i += 1) {
 }
 let playerTracerIndex = 0;
 const tracerEnd = new THREE.Vector3();
-function playerTracer(from, to) {
+function playerTracer(from, to, colorHex) {
   const slot = playerTracers[playerTracerIndex];
   playerTracerIndex = (playerTracerIndex + 1) % playerTracers.length;
+  slot.line.material.color.setHex(colorHex ?? 0x22d3ee);
   const attr = slot.line.geometry.getAttribute('position');
   attr.setXYZ(0, from.x, from.y, from.z);
   attr.setXYZ(1, to.x, to.y, to.z);
@@ -135,12 +136,12 @@ function rebuildGrenadeTargets() {
   }
 }
 
-// Named zones, shown in the HUD as the player moves through the yard.
+// Named zones, shown in the HUD as the player moves through the station.
 function zoneName(x, z) {
   for (const zone of ZONES) {
     if (x >= zone.minX && x <= zone.maxX && z >= zone.minZ && z <= zone.maxZ) return zone.name;
   }
-  return 'SILO YARD';
+  return 'HELIX STATION';
 }
 
 // Radio: one callout line at a time, at most one every 1.2 s, so the feed never floods.
@@ -171,14 +172,14 @@ const botCtx = {
   onPlayerHit(amount, attacker) { damagePlayer(amount, attacker); },
   onPlant(bot) {
     bomb.plantAt(bot.route[bot.route.length - 1] === 'aSite' ? 'A' : 'B');
-    radio(bot, `Charge down on ${bomb.state.site} — hold the site`);
-    hud.setBomb(`BOMB PLANTED — ${bomb.state.site} SITE`);
-    hud.roundMessage('Bomb planted on site ' + bomb.state.site);
+    radio(bot, `Void charge down on ${bomb.state.site} — hold the site`);
+    hud.setBomb(`VOID CHARGE PLANTED — ${bomb.state.site} SITE`);
+    hud.roundMessage('Void charge planted on site ' + bomb.state.site);
     audio.plant();
   },
   onDefuse(bot) {
     bomb.defuse();
-    endRound('defend', 'Bomb defused — Vultures hold the yard.');
+    endRound('defend', 'Void charge defused — VOID holds the station.');
   },
 };
 
@@ -217,7 +218,7 @@ function damagePlayer(amount, attacker) {
   playerState.alive = false;
   playerState.deaths += 1;
   hud.setHealth(0, weapon.state.armor);
-  if (attacker) hud.killfeed(`${attacker.name} [VULTURES]`, 'You', 'body', 'VK-7');
+  if (attacker) hud.killfeed(`${attacker.name} [VOID]`, 'You', 'body', 'VX-7');
   hud.roundMessage('You are down — your team fights on.');
   if (document.pointerLockElement) document.exitPointerLock();
 }
@@ -226,13 +227,13 @@ function botHurt(bot, amount, attacker, part) {
   if (!bot.alive) return;
   const killed = bots.hurt(bot, amount, attacker, part);
   if (!killed) return;
-  const killerName = attacker === null ? '💥 Grenade' : attacker === 'player' ? 'You' : attacker.name;
-  const killerWeapon = attacker === 'player' ? weapon.config().name : 'VK-7';
+  const killerName = attacker === null ? '💥 Plasma charge' : attacker === 'player' ? 'You' : attacker.name;
+  const killerWeapon = attacker === 'player' ? weapon.config().name : 'VX-7';
   const cause = part === 'head' ? 'head' : part === 'grenade' ? 'grenade' : 'body';
-  hud.killfeed(killerName, `${bot.name} [${bot.team === 'attack' ? 'SANDLINE' : 'VULTURES'}]`, cause, killerWeapon);
+  hud.killfeed(killerName, `${bot.name} [${bot.team === 'attack' ? 'NOVA' : 'VOID'}]`, cause, killerWeapon);
   if (bot.team === 'attack') {
     const zone = zoneName(bot.position.x, bot.position.z);
-    radio({ name: 'SANDLINE' }, `${bot.name} is down at ${zone}`);
+    radio({ name: 'NOVA' }, `${bot.name} is down at ${zone}`);
   }
   if (attacker === 'player') {
     playerState.kills += 1;
@@ -257,7 +258,7 @@ function shoot(spread) {
   const hit = raycaster.intersectObjects(shootables, false)[0];
   tracerEnd.copy(camera.position).addScaledVector(direction, 50);
   if (hit) tracerEnd.copy(hit.point);
-  playerTracer(muzzle, tracerEnd);
+  playerTracer(muzzle, tracerEnd, weapon.config().tracer);
   if (hit && hit.object.userData.bot) {
     const victim = hit.object.userData.bot;
     const part = hit.object.userData.part;
@@ -274,7 +275,7 @@ function shoot(spread) {
   bots.hear(camera.position);
   weapon.pullTrigger();
   player.recoil(0.009 + random() * 0.004, (random() * 2 - 1) * 0.004);
-  audio.shot();
+  audio.shot(weapon.config().sound);
   hud.setAmmo(weapon.ammo().mag, weapon.ammo().reserve, weapon.config().name);
   return true;
 }
@@ -285,7 +286,7 @@ function throwGrenade() {
   camera.getWorldDirection(direction);
   const origin = camera.position.clone().addScaledVector(direction, 0.5);
   grenades.throwGrenade(origin, direction);
-  hud.roundMessage(`Grenade out — ${weapon.state.grenades} left`);
+  hud.roundMessage(`Plasma charge out — ${weapon.state.grenades} left`);
   refreshLoadout();
 }
 
@@ -295,7 +296,7 @@ function throwSmoke() {
   camera.getWorldDirection(direction);
   const origin = camera.position.clone().addScaledVector(direction, 0.5);
   grenades.throwSmoke(origin, direction);
-  hud.roundMessage(`Smoke out — ${weapon.state.smokes} left`);
+  hud.roundMessage(`Ion veil out — ${weapon.state.smokes} left`);
   refreshLoadout();
 }
 
@@ -305,7 +306,7 @@ function refreshLoadout() {
 
 function buy(item) {
   if (rounds.state.phase !== 'buy') return;
-  if (item === 'rifle' || item === 'smg') {
+  if (item === 'rifle' || item === 'smg' || item === 'railgun') {
     if (weapon.owned[item]) return;
     if (!economy.spend(WEAPONS[item].price)) { audio.click(); return; }
     weapon.buy(item);
@@ -423,9 +424,9 @@ function checkRoundEnd() {
   const defAlive = bots.aliveCount('defend');
   const planted = bomb.state.status === 'planted';
   if (atkAlive === 0 && !planted) {
-    endRound('defend', 'SANDLINE wiped out.');
+    endRound('defend', 'NOVA wiped out.');
   } else if (defAlive === 0 && !planted) {
-    endRound('attack', 'Vultures wiped out.');
+    endRound('attack', 'VOID wiped out.');
   } else if (defAlive === 0 && planted) {
     endRound('attack', 'No one left to defuse.');
   }
@@ -442,7 +443,7 @@ function explodeBomb() {
     const dist = Math.hypot(dx, dy, dz);
     if (dist < 12) target.hurt(Math.round(120 * (1 - dist / 12) + 20));
   }
-  endRound('attack', 'The charge detonated.');
+  endRound('attack', 'The void charge detonated.');
 }
 
 function onLockChange(locked) {
@@ -480,7 +481,7 @@ function step(dt) {
   if (phase !== 'matchEnd') {
     const transition = rounds.step(dt);
     if (transition === 'live') {
-      hud.roundMessage('Go go go — plant the charge on A or B');
+      hud.roundMessage('Go go go — plant the void charge on A or B');
       setBuyOpen(false);
     } else if (transition === 'next') {
       if (rounds.nextRound()) startRound();
@@ -489,8 +490,8 @@ function step(dt) {
         const def = rounds.state.scoreDefend;
         const won = atk > def;
         hud.showEndOverlay(
-          won ? 'YARD TAKEN' : atk === def ? 'DRAW' : 'YARD LOST',
-          `Final score SANDLINE ${atk} : ${def} VULTURES. ${playerState.kills} eliminations, ${playerState.deaths} deaths.`,
+          won ? 'STATION TAKEN' : atk === def ? 'DRAW' : 'STATION LOST',
+          `Final score NOVA ${atk} : ${def} VOID. ${playerState.kills} eliminations, ${playerState.deaths} deaths.`,
           'Play again',
         );
         if (document.pointerLockElement) document.exitPointerLock();
@@ -511,8 +512,8 @@ function step(dt) {
           bomb.plantAt(site);
           economy.earn(PLANT_REWARD);
           hud.setMoney(economy.money);
-          hud.setBomb(`BOMB PLANTED — ${site} SITE`);
-          hud.roundMessage('Bomb planted — hold the site');
+          hud.setBomb(`VOID CHARGE PLANTED — ${site} SITE`);
+          hud.roundMessage('Void charge planted — hold the site');
           audio.plant();
           plantProgress = 0;
           hud.setProgress(null, 0);
@@ -527,7 +528,7 @@ function step(dt) {
             bomb.defuse();
             defuseProgress = 0;
             hud.setProgress(null, 0);
-            endRound('defend', 'Bomb defused — Vultures hold the yard.');
+            endRound('defend', 'Void charge defused — VOID holds the station.');
           }
         } else {
           defuseProgress = 0;
@@ -566,7 +567,7 @@ function step(dt) {
     hud.drawMinimap(body.position, body.yaw, bots.bots, bomb.state);
   }
   if (bomb.state.status === 'planted') {
-    hud.setBomb(`BOMB PLANTED — ${bomb.state.site} SITE · ${Math.ceil(bomb.state.timer)}s`);
+    hud.setBomb(`VOID CHARGE PLANTED — ${bomb.state.site} SITE · ${Math.ceil(bomb.state.timer)}s`);
   }
 }
 
@@ -581,14 +582,16 @@ function frame(now) {
     if (buyOpen) {
       if (input.takePress('Digit2')) buy('rifle');
       if (input.takePress('Digit3')) buy('smg');
-      if (input.takePress('Digit4')) buy('grenade');
-      if (input.takePress('Digit5')) buy('armor');
-      if (input.takePress('Digit6')) buy('kit');
-      if (input.takePress('Digit7')) buy('smoke');
+      if (input.takePress('Digit4')) buy('railgun');
+      if (input.takePress('Digit5')) buy('grenade');
+      if (input.takePress('Digit6')) buy('armor');
+      if (input.takePress('Digit7')) buy('kit');
+      if (input.takePress('Digit8')) buy('smoke');
     } else {
       if (input.takePress('Digit1')) { weapon.switchTo('pistol'); refreshLoadout(); }
       if (input.takePress('Digit2')) { weapon.switchTo('rifle'); refreshLoadout(); }
       if (input.takePress('Digit3')) { weapon.switchTo('smg'); refreshLoadout(); }
+      if (input.takePress('Digit4')) { weapon.switchTo('railgun'); refreshLoadout(); }
       if (input.takePress('KeyG')) throwGrenade();
       if (input.takePress('KeyQ')) throwSmoke();
     }
@@ -631,7 +634,7 @@ function runShot(name) {
     body.position.set(0, 0, 6);
     body.yaw = Math.PI;
     settle(30);
-    // Walk two defenders into the open gantry ground south of the mill hall, so the
+    // Walk two defenders into the open mag-rail ground south of the core hall, so the
     // frame reads as a firefight: both in the clear, name tags readable, the hall
     // behind them for depth. They stand close enough that both fit one frame.
     const defenders = bots.bots.filter((b) => b.team === 'defend');
@@ -642,8 +645,8 @@ function runShot(name) {
     defenders[0].group.rotation.y = Math.PI;
     defenders[1].group.rotation.y = Math.PI;
     settle(10);
-    // A support bot's smoke pops left of the defenders, so the cover shows the
-    // new utility in play: a grey cloud at the frame's edge, defenders visible
+    // A support bot's ion veil pops left of the defenders, so the cover shows the
+    // new utility in play: a violet cloud at the frame's edge, defenders visible
     // beside it, muzzle flash and tracer cutting across. The long settle lets
     // the cloud fully swell (fuse 1.1 s + ~1.4 s of growth) before the frame.
     weapon.state.smokes = 1;
@@ -663,7 +666,7 @@ function runShot(name) {
     // The staged frame is a hero shot, not a damage report: restore full health.
     playerState.health = PLAYER_HEALTH;
     hud.setHealth(playerState.health, weapon.state.armor);
-    hud.radio(`${defenders[0].name}: Contact at Mill Hall — two at the gantry`);
+    hud.radio(`${defenders[0].name}: Contact at Core Hall — two at the mag-rail`);
   } else {
     rounds.state.scoreAttack = 5;
     rounds.state.scoreDefend = 3;
@@ -672,8 +675,8 @@ function runShot(name) {
     body.yaw = Math.PI * 0.75;
     settle(20);
     hud.showEndOverlay(
-      'YARD TAKEN',
-      'Final score SANDLINE 5 : 3 VULTURES. 7 eliminations, 2 deaths.',
+      'STATION TAKEN',
+      'Final score NOVA 5 : 3 VOID. 7 eliminations, 2 deaths.',
       'Play again',
     );
   }

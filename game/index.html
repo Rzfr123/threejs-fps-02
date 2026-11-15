@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SANDLINE — a three.js tactical FPS</title>
+<title>VOIDLINE — a three.js tactical FPS</title>
 <style>
   :root {
-    --canvas: #1b1e26;
-    --surface: #2a2e38;
-    --hairline: #3a3f4c;
-    --ink: #efe9dc;
-    --muted: #9aa0ab;
-    --accent: #f0a830;
-    --sand: #c9a86a;
-    --teal: #3fb8a6;
-    --rust: #c65f3d;
+    --canvas: #07080d;
+    --surface: #12141f;
+    --hairline: #232839;
+    --ink: #e8f6ff;
+    --muted: #8b93a7;
+    --accent: #22d3ee;
+    --sand: #3a4358;
+    --teal: #f472b6;
+    --rust: #7c3aed;
     --radius-panel: 4px;
     --radius-control: 8px;
     --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -43,7 +43,7 @@
 
   #topbar { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; font-family: var(--font-readout); font-size: 14px; }
   #minimap-wrap { position: fixed; top: 18px; left: 24px; }
-  #minimap { display: block; width: 168px; height: 134px; border: 1px solid var(--hairline); border-radius: var(--radius-panel); background: rgba(27,30,38,.82); }
+  #minimap { display: block; width: 168px; height: 134px; border: 1px solid var(--hairline); border-radius: var(--radius-panel); background: rgba(7,8,13,.82); }
   #location-label { margin-top: 6px; font-family: var(--font-readout); font-size: 12px; letter-spacing: .08em; color: var(--muted); }
   #radio-line { position: fixed; left: 32px; bottom: 168px; max-width: 420px; font-family: var(--font-readout); font-size: 13px; color: var(--accent); opacity: 0; transition: opacity 200ms; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
   #radio-line.show { opacity: 1; }
@@ -125,11 +125,11 @@
 <div id="hud" aria-hidden="true">
   <div id="crosshair"><i></i><i></i><i></i><i></i><span class="dot"></span></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
-  <div id="minimap-wrap"><canvas id="minimap" width="168" height="134"></canvas><div id="location-label">YARD SOUTH</div></div>
+  <div id="minimap-wrap"><canvas id="minimap" width="168" height="134"></canvas><div id="location-label">DOCKING BAY</div></div>
   <div id="topbar">
     <span id="alive"><span id="alive-atk">▲ 5</span><span id="alive-def">▼ 5</span></span>
     <span id="timer-value">1:40</span>
-    <span id="score-value">ROUND 1 — SANDLINE 0 : 0 VULTURES</span>
+    <span id="score-value">ROUND 1 — NOVA 0 : 0 VOID</span>
   </div>
   <div id="banner"><span id="bomb-status"></span></div>
   <div id="killfeed"></div>
@@ -142,32 +142,33 @@
     <div id="health-bar-wrap"><div id="health-bar"></div></div>
     <div id="armor-line">ARMOR <span id="armor-value">0</span></div>
   </div>
-  <div id="ammo"><div><span id="ammo-mag">12</span><span id="ammo-reserve">/ 48</span><span id="weapon-name">P9 sidearm</span><div id="loadout"></div></div></div>
+  <div id="ammo"><div><span id="ammo-mag">12</span><span id="ammo-reserve">/ 48</span><span id="weapon-name">LX-9 sidearm</span><div id="loadout"></div></div></div>
 </div>
 
 <div id="buy-menu" hidden>
   <div class="buy-panel">
     <h2>Buy phase — <span id="buy-money">$800</span></h2>
     <p>Round <span id="buy-round">1</span> of 12. Spend it before the freeze ends; press B to deploy.</p>
-    <button class="buy-row" id="buy-rifle" data-buy="rifle"><span class="buy-key">2</span><span class="buy-name">VK-7 rifle<span class="buy-desc">30-round automatic. The yard's workhorse.</span></span><span class="buy-price">$2700</span></button>
-    <button class="buy-row" id="buy-smg" data-buy="smg"><span class="buy-key">3</span><span class="buy-name">RAT-9 SMG<span class="buy-desc">Fast, light, forgiving up close.</span></span><span class="buy-price">$1500</span></button>
-    <button class="buy-row" id="buy-grenade" data-buy="grenade"><span class="buy-key">4</span><span class="buy-name">Frag grenade<span class="buy-desc">One bounce, then a 7 m blast. Key G to throw.</span></span><span class="buy-price">$300</span></button>
-    <button class="buy-row" id="buy-smoke" data-buy="smoke"><span class="buy-key">7</span><span class="buy-name">Smoke grenade<span class="buy-desc">A 12 s grey cloud that hides you from every bot. Key Q to throw.</span></span><span class="buy-price">$400</span></button>
-    <button class="buy-row" id="buy-armor" data-buy="armor"><span class="buy-key">5</span><span class="buy-name">Kevlar vest<span class="buy-desc">Absorbs half of each hit until it breaks.</span></span><span class="buy-price">$650</span></button>
-    <button class="buy-row" id="buy-kit" data-buy="kit"><span class="buy-key">6</span><span class="buy-name">Defuse kit<span class="buy-desc">Halves the defuse time, 5 s to 2.5 s.</span></span><span class="buy-price">$400</span></button>
+    <button class="buy-row" id="buy-rifle" data-buy="rifle"><span class="buy-key">2</span><span class="buy-name">VX-7 plasma rifle<span class="buy-desc">30-round automatic. The station's workhorse.</span></span><span class="buy-price">$2700</span></button>
+    <button class="buy-row" id="buy-smg" data-buy="smg"><span class="buy-key">3</span><span class="buy-name">PX-9 pulse SMG<span class="buy-desc">Fast, light, forgiving up close.</span></span><span class="buy-price">$1500</span></button>
+    <button class="buy-row" id="buy-railgun" data-buy="railgun"><span class="buy-key">4</span><span class="buy-name">RG-1 railgun<span class="buy-desc">One shot, 95 damage, near-perfect accuracy. Slow cycle.</span></span><span class="buy-price">$4100</span></button>
+    <button class="buy-row" id="buy-grenade" data-buy="grenade"><span class="buy-key">5</span><span class="buy-name">Plasma charge<span class="buy-desc">One bounce, then a 7 m blast. Key G to throw.</span></span><span class="buy-price">$300</span></button>
+    <button class="buy-row" id="buy-armor" data-buy="armor"><span class="buy-key">6</span><span class="buy-name">Aegis vest<span class="buy-desc">Absorbs half of each hit until it breaks.</span></span><span class="buy-price">$650</span></button>
+    <button class="buy-row" id="buy-kit" data-buy="kit"><span class="buy-key">7</span><span class="buy-name">Defuse kit<span class="buy-desc">Halves the defuse time, 5 s to 2.5 s.</span></span><span class="buy-price">$400</span></button>
+    <button class="buy-row" id="buy-smoke" data-buy="smoke"><span class="buy-key">8</span><span class="buy-name">Ion veil<span class="buy-desc">A 12 s violet cloud that hides you from every bot. Key Q to throw.</span></span><span class="buy-price">$400</span></button>
     <div class="buy-close">B or click outside to close — the round starts when the timer ends.</div>
   </div>
 </div>
 
 <div id="overlay" class="overlay">
   <section class="panel" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
-    <h1 id="overlay-title">SAND<span>LINE</span></h1>
-    <p id="overlay-copy">A three-lane yard at dusk. Plant the charge on A or B, or wipe the defenders out. First to 7 rounds takes the yard.</p>
+    <h1 id="overlay-title">VOID<span>LINE</span></h1>
+    <p id="overlay-copy">An orbital station at the edge of the void. Plant the void charge on A or B, or wipe the defenders out. First to 7 rounds takes the station.</p>
     <button id="play" type="button">Click to play</button>
     <ul class="keys">
       <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &nbsp; <kbd>Mouse</kbd> Look</li>
-      <li><kbd>Click</kbd> Fire &nbsp; <kbd>R</kbd> Reload &nbsp; <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Weapons</li>
-      <li><kbd>G</kbd> Frag grenade &nbsp; <kbd>Q</kbd> Smoke grenade &nbsp; <kbd>E</kbd> Plant / defuse (hold)</li>
+      <li><kbd>Click</kbd> Fire &nbsp; <kbd>R</kbd> Reload &nbsp; <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> Weapons</li>
+      <li><kbd>G</kbd> Plasma charge &nbsp; <kbd>Q</kbd> Ion veil &nbsp; <kbd>E</kbd> Plant / defuse (hold)</li>
       <li><kbd>B</kbd> Buy menu (buy phase) &nbsp; <kbd>Ctrl</kbd> Crouch &nbsp; <kbd>Space</kbd> Jump</li>
     </ul>
   </section>

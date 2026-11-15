@@ -1,21 +1,21 @@
-// The map: "Silo Yard", a decommissioned grain yard at dusk. Attackers spawn south,
-// defenders north; site A sits west, site B east, and a broken mill hall links them.
-// Two rusted silo towers and a gantry crane are the landmarks: the yard reads at a
-// glance, and every box is a collider for players and bots and a surface a bullet
-// stops on. Plain geometry only, no models and no textures except the painted
-// site letters, which are drawn on a canvas at load time.
+// The map: "Helix Station", an orbital station at the edge of the void. Attackers
+// spawn south, defenders north; site A sits west, site B east, and a core hall
+// links them. Two reactor towers and a mag-rail beam are the landmarks: the station
+// reads at a glance, and every box is a collider for players and bots and a surface
+// a bullet stops on. Plain geometry only, no models and no textures except the
+// painted site letters, which are drawn on a canvas at load time.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
-// Named zones, shown in the HUD as the player moves through the yard.
+// Named zones, shown in the HUD as the player moves through the station.
 export const ZONES = [
-  { name: 'SITE A — SILO ROW', minX: -20, maxX: -11, minZ: -16, maxZ: -7 },
-  { name: 'SITE B — SILO ROW', minX: 11, maxX: 20, minZ: -16, maxZ: -7 },
-  { name: 'MILL HALL', minX: -8, maxX: 8, minZ: -4, maxZ: 2 },
-  { name: 'GANTRY', minX: -8, maxX: 8, minZ: 2, maxZ: 8 },
-  { name: 'YARD SOUTH', minX: -20, maxX: 20, minZ: 8, maxZ: 16 },
-  { name: 'WEST LANE', minX: -20, maxX: -8, minZ: -7, maxZ: 8 },
-  { name: 'EAST LANE', minX: 8, maxX: 20, minZ: -7, maxZ: 8 },
+  { name: 'SITE A — REACTOR ROW', minX: -20, maxX: -11, minZ: -16, maxZ: -7 },
+  { name: 'SITE B — DOCK ROW', minX: 11, maxX: 20, minZ: -16, maxZ: -7 },
+  { name: 'CORE HALL', minX: -8, maxX: 8, minZ: -4, maxZ: 2 },
+  { name: 'MAG-RAIL', minX: -8, maxX: 8, minZ: 2, maxZ: 8 },
+  { name: 'DOCKING BAY', minX: -20, maxX: 20, minZ: 8, maxZ: 16 },
+  { name: 'WEST CONDUIT', minX: -20, maxX: -8, minZ: -7, maxZ: 8 },
+  { name: 'EAST CONDUIT', minX: 8, maxX: 20, minZ: -7, maxZ: 8 },
 ];
 
 // Site zones: a planted bomb must sit inside one of these rectangles.
@@ -92,11 +92,21 @@ export function createWorld(scene) {
 
   const materials = {};
   for (const name of Object.keys(PALETTE)) {
-    materials[name] = new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(PALETTE[name]),
       roughness: name === 'accent' || name === 'ink' || name === 'teal' ? 0.55 : 0.92,
       metalness: 0.03,
     });
+    // The neon tech glows: site pads, reactor towers and void trim carry their own
+    // light so the station reads at a glance even in the dark deck.
+    if (name === 'accent' || name === 'teal') {
+      mat.emissive = new THREE.Color(PALETTE[name]);
+      mat.emissiveIntensity = 0.85;
+    } else if (name === 'rust') {
+      mat.emissive = new THREE.Color(PALETTE[name]);
+      mat.emissiveIntensity = 0.5;
+    }
+    materials[name] = mat;
   }
 
   const colliders = [];
@@ -121,7 +131,7 @@ export function createWorld(scene) {
     canvas.width = 256;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#1b1e26';
+    ctx.fillStyle = '#07080d';
     ctx.fillRect(0, 0, 256, 256);
     ctx.strokeStyle = color;
     ctx.lineWidth = 10;
@@ -144,7 +154,7 @@ export function createWorld(scene) {
     return sign;
   }
 
-  // Floor and perimeter: a 40 x 32 m yard, 5 m walls, open to the dusk sky.
+  // Floor and perimeter: a 40 x 32 m station deck, 5 m walls, open to the void sky.
   box(40.4, 0.4, 32.4, 0, -0.2, 0, 'sandDark');
   box(0.4, 5, 32.4, -20.2, 2.5, 0, 'surface');
   box(0.4, 5, 32.4, 20.2, 2.5, 0, 'surface');
@@ -163,7 +173,8 @@ export function createWorld(scene) {
   box(6, 3.4, 0.5, -5, 1.7, -4, 'surface');
   box(6, 3.4, 0.5, 5, 1.7, -4, 'surface');
 
-  // Site markers: flat amber/teal pads so the objective reads at a glance.
+  // Site markers: glowing holo pads so the objective reads at a glance. The thin
+  // neon frame around each pad is decoration only — it adds no collider.
   const siteA = new THREE.Mesh(new THREE.BoxGeometry(7, 0.06, 7), materials.accent);
   siteA.position.set(SITES.A.cx, 0.03, SITES.A.cz);
   siteA.receiveShadow = true;
@@ -172,11 +183,43 @@ export function createWorld(scene) {
   siteB.position.set(SITES.B.cx, 0.03, SITES.B.cz);
   siteB.receiveShadow = true;
   group.add(siteB);
+  function holoFrame(cx, cz, colorHex) {
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) });
+    const edges = [
+      [7.4, 0.04, 0.14, cx, 0.07, cz - 3.6],
+      [7.4, 0.04, 0.14, cx, 0.07, cz + 3.6],
+      [0.14, 0.04, 7.4, cx - 3.6, 0.07, cz],
+      [0.14, 0.04, 7.4, cx + 3.6, 0.07, cz],
+    ];
+    for (const [w, h, d, x, y, z] of edges) {
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      edge.position.set(x, y, z);
+      group.add(edge);
+    }
+  }
+  holoFrame(SITES.A.cx, SITES.A.cz, PALETTE.accent);
+  holoFrame(SITES.B.cx, SITES.B.cz, PALETTE.teal);
 
-  // Landmarks: two rusted silo towers behind the sites and a gantry crane over the
-  // mill hall. The silos are cylinders with box colliders; the gantry beam sits
-  // above head height and its legs are the cover.
-  function silo(x, z) {
+  // Neon trim: thin emissive strips along the walls and the mag-rail, decoration
+  // only — no colliders, so the map plays exactly as before.
+  function neon(w, h, d, x, y, z, colorHex) {
+    const strip = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) }),
+    );
+    strip.position.set(x, y, z);
+    group.add(strip);
+    return strip;
+  }
+  neon(40.4, 0.08, 0.08, 0, 5.05, -16.2, PALETTE.accent);
+  neon(40.4, 0.08, 0.08, 0, 5.05, 16.2, PALETTE.teal);
+  neon(0.08, 0.08, 12, -8, 3.45, 6, PALETTE.accent);
+  neon(0.08, 0.08, 12, 8, 3.45, 6, PALETTE.teal);
+
+  // Landmarks: two reactor towers behind the sites and a mag-rail beam over the
+  // core hall. The reactors are cylinders with box colliders and a glowing ring
+  // and core; the beam sits above head height and its legs are the cover.
+  function reactor(x, z, ringColor) {
     const tower = new THREE.Mesh(
       new THREE.CylinderGeometry(2.2, 2.2, 9, 20),
       materials.rust,
@@ -185,22 +228,29 @@ export function createWorld(scene) {
     tower.castShadow = true;
     tower.receiveShadow = true;
     group.add(tower);
-    const cap = new THREE.Mesh(
-      new THREE.ConeGeometry(2.3, 1.2, 20),
-      materials.hairline,
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(2.2, 0.12, 8, 28),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(ringColor) }),
     );
-    cap.position.set(x, 9.6, z);
-    cap.castShadow = true;
-    group.add(cap);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(x, 9.1, z);
+    group.add(ring);
+    const core = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.7, 0.7, 1.0, 12),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(ringColor) }),
+    );
+    core.position.set(x, 9.4, z);
+    group.add(core);
     colliders.push(new THREE.Box3(new THREE.Vector3(x - 2.2, 0, z - 2.2), new THREE.Vector3(x + 2.2, 9, z + 2.2)));
     shootables.push(tower);
     minimapWalls.push({ x, z, w: 4.4, d: 4.4 });
   }
-  silo(-17.5, -14.5);
-  silo(17.5, -14.5);
+  reactor(-17.5, -14.5, PALETTE.accent);
+  reactor(17.5, -14.5, PALETTE.teal);
   box(16, 0.7, 0.9, 0, 4.6, 2, 'hairline');
   box(0.7, 4.6, 0.9, -7.6, 2.3, 2, 'hairline');
   box(0.7, 4.6, 0.9, 7.6, 2.3, 2, 'hairline');
+  neon(16, 0.1, 0.1, 0, 5.02, 2, PALETTE.cyan);
 
   // Painted site letters on the north wall, facing the yard.
   siteSign('A', PALETTE.accent, -15, -15.9);
@@ -221,11 +271,12 @@ export function createWorld(scene) {
   box(2.0, 2.6, 0.6, -10.5, 1.3, 0, 'surface');
   box(2.0, 2.6, 0.6, 10.5, 1.3, 0, 'surface');
 
-  // Light: a low warm sun from the west, a cool dusk fill, and a sky/ground gradient.
-  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.dusk), new THREE.Color(PALETTE.sandDark), 1.35);
+  // Light: a cold cyan key from the west, a magenta fill, and a violet-tinged
+  // sky/ground gradient — the station's own glow does the rest.
+  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.dusk), new THREE.Color(PALETTE.rust), 1.1);
   scene.add(sky);
 
-  const sun = new THREE.DirectionalLight(new THREE.Color(PALETTE.accent), 2.4);
+  const sun = new THREE.DirectionalLight(new THREE.Color(PALETTE.accent), 2.2);
   sun.position.set(-18, 16, 10);
   sun.target.position.set(0, 0, -2);
   sun.castShadow = true;

@@ -1,8 +1,9 @@
-// Grenades: a frag and a smoke, both thrown with an arc. The frag bounces once,
-// then a timed blast that hurts through a radius with falloff, blocked by walls.
-// The smoke pops on landing into a grey cloud that lives ~12 s: it blocks
-// line of sight for every bot on both teams (vision checks ask blocksVision),
-// so a push can cross an open lane unseen, but bullets still fly through it.
+// Grenades: a plasma charge and an ion veil, both thrown with an arc. The charge
+// bounces once, then a timed blast that hurts through a radius with falloff,
+// blocked by walls. The veil pops on landing into a violet cloud that lives ~12 s:
+// it blocks line of sight for every bot on both teams (vision checks ask
+// blocksVision), so a push can cross an open lane unseen, but bullets still fly
+// through it.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 
@@ -25,14 +26,16 @@ export function createGrenades(scene, colliders, shootables) {
   const seg = new THREE.Vector3();
 
   const shellGeo = new THREE.SphereGeometry(0.09, 10, 8);
-  const shellMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.rust), roughness: 0.5, metalness: 0.4 });
+  // Plasma charge: a cyan orb with its own glow. Ion veil: a violet canister.
+  const shellMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.accent), emissive: new THREE.Color(PALETTE.accent), emissiveIntensity: 0.9, roughness: 0.4, metalness: 0.3 });
+  const veilShellMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.violet), emissive: new THREE.Color(PALETTE.violet), emissiveIntensity: 0.7, roughness: 0.4, metalness: 0.3 });
   const smokeGeo = new THREE.SphereGeometry(1, 12, 9);
-  const smokeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xb9b2a4), transparent: true, opacity: 0.34, depthWrite: false });
+  const smokeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x8b5cf6), transparent: true, opacity: 0.4, depthWrite: false });
   const blastGeo = new THREE.SphereGeometry(1, 20, 14);
-  const blastMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(PALETTE.accent), transparent: true, opacity: 0.55, depthWrite: false });
+  const blastMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9be8ff), transparent: true, opacity: 0.55, depthWrite: false });
 
   function throwShell(origin, direction, speed, fuse, kind) {
-    const mesh = new THREE.Mesh(shellGeo, shellMat);
+    const mesh = new THREE.Mesh(shellGeo, kind === 'smoke' ? veilShellMat : shellMat);
     mesh.position.copy(origin);
     mesh.castShadow = true;
     scene.add(mesh);
@@ -55,7 +58,7 @@ export function createGrenades(scene, colliders, shootables) {
     throwShell(origin, direction, speed, SMOKE_FUSE, 'smoke');
   }
 
-  // A smoke cloud: a cluster of soft grey puffs around a centre, swelling in the
+  // An ion veil: a cluster of soft violet puffs around a centre, swelling in the
   // first second, drifting up slowly, fading out over its last three seconds.
   function deploySmoke(center) {
     const puffs = [];
@@ -174,7 +177,7 @@ export function createGrenades(scene, colliders, shootables) {
       for (const puff of cloud.puffs) {
         puff.scale.setScalar(puff.userData.grow * (0.55 + 0.45 * grow));
         puff.position.y += puff.userData.drift * dt;
-        puff.material.opacity = 0.34 * fade;
+        puff.material.opacity = 0.4 * fade;
       }
       if (cloud.age >= cloud.life) {
         for (const puff of cloud.puffs) scene.remove(puff);

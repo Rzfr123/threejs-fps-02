@@ -8,11 +8,11 @@ import { WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE, KIT_PRICE } from './w
 
 const COPY = {
   start: {
-    title: 'SANDLINE',
-    copy: 'A grain yard at dusk. Plant the charge on A or B, or wipe the defenders out. First to 7 rounds takes the yard.',
+    title: 'VOIDLINE',
+    copy: 'An orbital station at the edge of the void. Plant the void charge on A or B, or wipe the defenders out. First to 7 rounds takes the station.',
     action: 'Click to play',
   },
-  paused: { title: 'SANDLINE', copy: 'Paused. Click to resume.', action: 'Click to resume' },
+  paused: { title: 'VOIDLINE', copy: 'Paused. Click to resume.', action: 'Click to resume' },
 };
 
 export function createHud() {
@@ -76,16 +76,17 @@ export function createHud() {
     },
     setLoadout(current, owned, grenades, kit, smokes = 0) {
       const slots = [
-        { id: 'pistol', key: '1', label: 'P9' },
-        { id: 'rifle', key: '2', label: 'VK-7' },
-        { id: 'smg', key: '3', label: 'RAT-9' },
+        { id: 'pistol', key: '1', label: 'LX-9' },
+        { id: 'rifle', key: '2', label: 'VX-7' },
+        { id: 'smg', key: '3', label: 'PX-9' },
+        { id: 'railgun', key: '4', label: 'RG-1' },
       ].map((s) => {
         const has = !!owned[s.id];
         const active = current === s.id;
         return `<span class="slot${active ? ' active' : ''}${has ? '' : ' locked'}">${s.key} ${s.label}</span>`;
       }).join('');
-      const util = `<span class="slot util">G Frag ×${grenades}</span>`
-        + (smokes > 0 ? `<span class="slot util">Q Smoke ×${smokes}</span>` : '')
+      const util = `<span class="slot util">G Plasma ×${grenades}</span>`
+        + (smokes > 0 ? `<span class="slot util">Q Ion veil ×${smokes}</span>` : '')
         + (kit ? '<span class="slot util">Kit</span>' : '');
       const html = slots + util;
       if (last.loadout === html) return;
@@ -107,7 +108,7 @@ export function createHud() {
       setText(timerValue, 'timer', `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
     },
     setScore(atk, def, round) {
-      setText(scoreValue, 'score', `ROUND ${round}/12 — SANDLINE ${atk} : ${def} VULTURES`);
+      setText(scoreValue, 'score', `ROUND ${round}/12 — NOVA ${atk} : ${def} VOID`);
     },
     setAlive(atk, def) {
       setText(aliveAtk, 'aatk', `▲ ${atk}`);
@@ -143,7 +144,7 @@ export function createHud() {
       const line = document.createElement('div');
       line.className = 'feed-line';
       const head = cause === 'head' ? ' HEADSHOT' : cause === 'grenade' ? ' 💥' : '';
-      line.textContent = `${killer} ✕ ${victim} [${weaponName ?? 'VK-7'}]${head}`;
+      line.textContent = `${killer} ✕ ${victim} [${weaponName ?? 'VX-7'}]${head}`;
       killfeed.prepend(line);
       while (killfeed.children.length > 5) killfeed.removeChild(killfeed.lastChild);
       setTimeout(() => line.remove(), 6000);
@@ -187,7 +188,7 @@ export function createHud() {
     setBuyOpen(open, owned) {
       buyMenu.hidden = !open;
       if (!open) return;
-      for (const id of ['rifle', 'smg']) {
+      for (const id of ['rifle', 'smg', 'railgun']) {
         const btn = $(`buy-${id}`);
         btn.disabled = !!owned[id];
         btn.querySelector('.buy-price').textContent = owned[id] ? 'OWNED' : `$${WEAPONS[id].price}`;
@@ -204,7 +205,7 @@ export function createHud() {
         handler(btn.dataset.buy);
       });
     },
-    // Minimap: walls and sites once, dots every call. The yard is 40 x 32 m,
+    // Minimap: walls and sites once, dots every call. The station is 40 x 32 m,
     // mapped onto a 168 x 134 px canvas, north at the top.
     setMinimapWalls(walls) {
       mapWalls = walls;
@@ -215,37 +216,37 @@ export function createHud() {
       const w = minimap.width;
       const h = minimap.height;
       mapCtx.clearRect(0, 0, w, h);
-      mapCtx.fillStyle = 'rgba(27,30,38,0.82)';
+      mapCtx.fillStyle = 'rgba(7,8,13,0.82)';
       mapCtx.fillRect(0, 0, w, h);
       const px = (x) => (x + 20) * mapScale;
       const py = (z) => (z + 16) * mapScale;
-      mapCtx.fillStyle = '#3a3f4c';
+      mapCtx.fillStyle = '#232839';
       for (const wall of mapWalls) {
         mapCtx.fillRect(px(wall.x - wall.w / 2), py(wall.z - wall.d / 2), wall.w * mapScale, wall.d * mapScale);
       }
-      // Sites: amber A west, teal B east.
+      // Sites: cyan A west, magenta B east.
       mapCtx.font = 'bold 13px system-ui, sans-serif';
       mapCtx.textAlign = 'center';
       mapCtx.textBaseline = 'middle';
-      mapCtx.fillStyle = '#f0a830';
+      mapCtx.fillStyle = '#22d3ee';
       mapCtx.fillRect(px(-18.5), py(-14.5), 7 * mapScale, 7 * mapScale);
-      mapCtx.fillStyle = '#1b1e26';
+      mapCtx.fillStyle = '#07080d';
       mapCtx.fillText('A', px(-15), py(-11));
-      mapCtx.fillStyle = '#3fb8a6';
+      mapCtx.fillStyle = '#f472b6';
       mapCtx.fillRect(px(11.5), py(-14.5), 7 * mapScale, 7 * mapScale);
-      mapCtx.fillStyle = '#1b1e26';
+      mapCtx.fillStyle = '#07080d';
       mapCtx.fillText('B', px(15), py(-11));
       // Bomb marker when planted.
       if (bombState.status === 'planted') {
-        mapCtx.fillStyle = '#c65f3d';
+        mapCtx.fillStyle = '#f472b6';
         mapCtx.beginPath();
         mapCtx.arc(px(bombState.position.x), py(bombState.position.z), 5, 0, Math.PI * 2);
         mapCtx.fill();
       }
-      // Teammates amber, enemies teal, only while alive.
+      // Teammates cyan, enemies magenta, only while alive.
       for (const bot of bots) {
         if (!bot.alive) continue;
-        mapCtx.fillStyle = bot.team === 'attack' ? '#f0a830' : '#3fb8a6';
+        mapCtx.fillStyle = bot.team === 'attack' ? '#22d3ee' : '#f472b6';
         mapCtx.beginPath();
         mapCtx.arc(px(bot.position.x), py(bot.position.z), 3, 0, Math.PI * 2);
         mapCtx.fill();
@@ -254,7 +255,7 @@ export function createHud() {
       const x = px(playerPos.x);
       const y = py(playerPos.z);
       const angle = Math.atan2(-Math.cos(yaw), -Math.sin(yaw));
-      mapCtx.fillStyle = '#efe9dc';
+      mapCtx.fillStyle = '#e8f6ff';
       mapCtx.beginPath();
       mapCtx.moveTo(x + Math.cos(angle) * 7, y + Math.sin(angle) * 7);
       mapCtx.lineTo(x + Math.cos(angle + 2.5) * 5, y + Math.sin(angle + 2.5) * 5);

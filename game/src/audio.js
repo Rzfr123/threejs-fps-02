@@ -32,7 +32,14 @@ export function createAudio() {
   }
   return {
     unlock() { ensure(); },
-    shot() { tone(180, 0.09, 'square', 0.12, 60); },
+    // One voice per gun, so a fight reads by ear: the LX-9 chirps, the VX-7
+    // growls down, the PX-9 blips, the RG-1 booms with a crack on top.
+    shot(kind = 'plasma') {
+      if (kind === 'sidearm') tone(1400, 0.07, 'sine', 0.12, 900);
+      else if (kind === 'pulse') tone(1200, 0.05, 'square', 0.1, 800);
+      else if (kind === 'railgun') { tone(70, 0.35, 'sawtooth', 0.22, 40); tone(1800, 0.06, 'square', 0.12, 900); }
+      else tone(880, 0.12, 'sawtooth', 0.14, 220);
+    },
     enemyShot() { tone(140, 0.07, 'square', 0.05, 70); },
     hit() { tone(900, 0.05, 'sine', 0.12); },
     kill() { tone(660, 0.12, 'sine', 0.14, 990); },

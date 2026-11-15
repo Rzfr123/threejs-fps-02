@@ -1,4 +1,4 @@
-// SANDLINE — a three.js tactical FPS entry for make.fun threejs-fps-02 (Node 22,
+// VOIDLINE — a three.js tactical FPS entry for make.fun threejs-fps-02 (Node 22,
 // standard library only): the game is this directory's game/ folder, plain static
 // files the browser loads as ES modules with three.js from an import map, and the
 // program hands it in. It copies game/ and screenshots/ from beside this file to
